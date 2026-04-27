@@ -22,7 +22,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 400,
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ error: 'Invalid JSON' })
+      body: JSON.stringify({ error: 'Invalid JSON', raw: event.body })
     };
   }
 
@@ -35,13 +35,17 @@ exports.handler = async (event) => {
   }
 
   const url = endpoint === 'auth'
-    ? 'https://www.tangofactura.com/Provisioning/GetAuthToken'
-    : `https://www.tangofactura.com/Services/Facturacion/${endpoint}`;
+    ? 'https://www.tfactura.io/Provisioning/GetAuthToken'
+    : `https://www.tfactura.io/Services/Facturacion/${endpoint}`;
 
   const payload = JSON.stringify(body);
 
-  const doRequest = (reqUrl) => new Promise((resolve, reject) => {
+  const doRequest = (reqUrl, redirectCount) => new Promise((resolve, reject) => {
+    if (redirectCount > 5) return reject(new Error('Too many redirects'));
+
     const urlObj = new URL(reqUrl);
+    const lib = urlObj.protocol === 'https:' ? require('https') : require('http');
+
     const options = {
       hostname: urlObj.hostname,
       path: urlObj.pathname + urlObj.search,
@@ -50,16 +54,22 @@ exports.handler = async (event) => {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
         'Host': urlObj.hostname,
+        'Accept': 'application/json',
       },
     };
 
-    const req = https.request(options, (res) => {
+    const req = lib.request(options, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return doRequest(res.headers.location).then(resolve).catch(reject);
+        const location = res.headers.location;
+        const nextUrl = location.startsWith('http')
+          ? location
+          : `${urlObj.protocol}//${urlObj.hostname}${location}`;
+        res.resume();
+        return doRequest(nextUrl, (redirectCount || 0) + 1).then(resolve).catch(reject);
       }
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => resolve(data));
+      res.on('end', () => resolve({ status: res.statusCode, data }));
     });
 
     req.on('error', reject);
@@ -68,14 +78,14 @@ exports.handler = async (event) => {
   });
 
   try {
-    const data = await doRequest(url);
+    const { status, data } = await doRequest(url, 0);
     return {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Content-Type': 'application/json',
       },
-      body: data,
+      body: JSON.stringify({ _status: status, _url: url, _raw: data }),
     };
   } catch (e) {
     return {
