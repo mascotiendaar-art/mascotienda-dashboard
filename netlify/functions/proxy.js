@@ -1,10 +1,28 @@
 const https = require('https');
 
 exports.handler = async (event) => {
-  const { endpoint, body } = JSON.parse(event.body || '{}');
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+      body: '',
+    };
+  }
 
-  const isAuth = endpoint === 'auth';
-  const url = isAuth
+  let endpoint, body;
+  try {
+    const parsed = JSON.parse(event.body || '{}');
+    endpoint = parsed.endpoint;
+    body = parsed.body;
+  } catch (e) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
+  }
+
+  const url = endpoint === 'auth'
     ? 'https://www.tfactura.io/Provisioning/GetAuthToken'
     : `https://www.tfactura.io/Services/Facturacion/${endpoint}`;
 
