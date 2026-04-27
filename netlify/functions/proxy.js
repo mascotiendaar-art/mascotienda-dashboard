@@ -35,8 +35,8 @@ exports.handler = async (event) => {
   }
 
   const url = endpoint === 'auth'
-    ? 'https://www.tfactura.io/Provisioning/GetAuthToken'
-    : `https://www.tfactura.io/Services/Facturacion/${endpoint}`;
+    ? 'https://www.tangofactura.com/Provisioning/GetAuthToken'
+    : `https://www.tangofactura.com/Services/Facturacion/${endpoint}`;
 
   const payload = JSON.stringify(body);
 
