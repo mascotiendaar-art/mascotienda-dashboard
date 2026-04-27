@@ -38,40 +38,50 @@ exports.handler = async (event) => {
     ? 'https://www.tfactura.io/Provisioning/GetAuthToken'
     : `https://www.tfactura.io/Services/Facturacion/${endpoint}`;
 
-  return new Promise((resolve) => {
-    const payload = JSON.stringify(body);
+  const payload = JSON.stringify(body);
+
+  const doRequest = (reqUrl) => new Promise((resolve, reject) => {
+    const urlObj = new URL(reqUrl);
     const options = {
+      hostname: urlObj.hostname,
+      path: urlObj.pathname + urlObj.search,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
+        'Host': urlObj.hostname,
       },
     };
 
-    const req = https.request(url, options, (res) => {
+    const req = https.request(options, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return doRequest(res.headers.location).then(resolve).catch(reject);
+      }
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        resolve({
-          statusCode: 200,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': 'application/json',
-          },
-          body: data,
-        });
-      });
+      res.on('end', () => resolve(data));
     });
 
-    req.on('error', (e) => {
-      resolve({
-        statusCode: 500,
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: e.message }),
-      });
-    });
-
+    req.on('error', reject);
     req.write(payload);
     req.end();
   });
+
+  try {
+    const data = await doRequest(url);
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json',
+      },
+      body: data,
+    };
+  } catch (e) {
+    return {
+      statusCode: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: e.message }),
+    };
+  }
 };
