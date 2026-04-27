@@ -16,10 +16,22 @@ exports.handler = async (event) => {
   let endpoint, body;
   try {
     const parsed = JSON.parse(event.body || '{}');
-    endpoint = parsed.endpoint;
-    body = parsed.body;
+    endpoint = parsed.endpoint || '';
+    body = parsed.body || {};
   } catch (e) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
+    return {
+      statusCode: 400,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'Invalid JSON' })
+    };
+  }
+
+  if (!endpoint) {
+    return {
+      statusCode: 400,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'Missing endpoint' })
+    };
   }
 
   const url = endpoint === 'auth'
